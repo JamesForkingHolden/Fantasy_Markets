@@ -1,0 +1,152 @@
+import pandas_datareader.data as web
+import numpy as np
+import datetime as dt
+import pandas as pd
+
+currency = 'USD'
+metric = 'Adj Close'
+start = dt.datetime(2020, 12, 1)
+end = dt.datetime(2022, 2, 10)
+
+asset_list = pd.read_excel('asset_list.xlsx', sheet_name = 'full_list', header = 2, usecols = 'A:B', nrows = 250) #sheet_name = '' if necc
+
+assets = asset_list['Asset'].tolist()
+asset_type = asset_list['Type'].tolist()
+
+colnames = []
+
+for ticker, a_type in zip(assets, asset_type):
+    if ticker == assets[0]:
+        price_agg = web.DataReader(ticker, 'yahoo', start, end)
+        price_agg['Asset'] = ticker
+        price_agg['Asset_Type'] = a_type
+        price_agg.reset_index(inplace = True, drop = False)
+        
+    else:
+        data_incr = web.DataReader(ticker, 'yahoo', start, end)
+        data_incr['Asset'] = ticker
+        data_incr['Asset_Type'] = a_type
+        data_incr.reset_index(inplace = True, drop = False)
+        price_agg = pd.concat([price_agg, data_incr]) 
+
+price_agg.reset_index(inplace = True, drop = True)
+
+price_agg['Day_of_Week'] = price_agg['Date'].dt.day_name()
+
+week_filter = (
+    (price_agg['Asset_Type'] == 'Stock') & (price_agg['Day_of_Week'] == 'Friday')
+    |
+    (price_agg['Asset_Type'] == 'Crypto') & (price_agg['Day_of_Week'] == 'Sunday')
+)
+
+price_agg_weekly = price_agg.loc[week_filter]
+
+price_agg_weekly.reset_index(inplace = True, drop = True)
+
+asset_list = pd.read_excel('asset_list.xlsx', sheet_name = 'full_list', header = 2, usecols = 'A:B', skiprows = 250, nrows = 250) #sheet_name = '' if necc
+
+assets = asset_list.iloc[:,1].tolist()
+asset_type = asset_list.iloc[:,0].tolist()
+
+colnames = []
+
+for ticker, a_type in zip(assets, asset_type):
+    if ticker == assets[0]:
+        price_agg2 = web.DataReader(ticker, 'yahoo', start, end)
+        price_agg2['Asset'] = ticker
+        price_agg2['Asset_Type'] = a_type
+        price_agg2.reset_index(inplace = True, drop = False)
+        
+    else:
+        data_incr2 = web.DataReader(ticker, 'yahoo', start, end)
+        data_incr2['Asset'] = ticker
+        data_incr2['Asset_Type'] = a_type
+        data_incr2.reset_index(inplace = True, drop = False)
+        price_agg2 = pd.concat([price_agg2, data_incr2]) 
+
+price_agg2.reset_index(inplace = True, drop = True)
+
+price_agg2['Day_of_Week'] = price_agg2['Date'].dt.day_name()
+
+week_filter2 = (
+    (price_agg2['Asset_Type'] == 'Stock') & (price_agg2['Day_of_Week'] == 'Friday')
+    |
+    (price_agg2['Asset_Type'] == 'Crypto') & (price_agg2['Day_of_Week'] == 'Sunday')
+)
+
+price_agg_weekly2 = price_agg2.loc[week_filter2]
+
+price_agg_weekly2.reset_index(inplace = True, drop = True)
+
+asset_list = pd.read_excel('SB_Actuarial_FantasyMarkets.xlsx', sheet_name = 'Upload_Download', header = 2, usecols = 'AA:AB', nrows = 100) #sheet_name = '' if necc
+
+assets = asset_list.iloc[:,1].tolist()
+asset_type = asset_list.iloc[:,0].tolist()
+
+colnames = []
+
+for ticker, a_type in zip(assets, asset_type):
+    if ticker == assets[0]:
+        price_agg3 = web.DataReader(ticker, 'yahoo', start, end)
+        price_agg3['Asset'] = ticker
+        price_agg3['Asset_Type'] = a_type
+        price_agg3.reset_index(inplace = True, drop = False)
+        
+    else:
+        data_incr3 = web.DataReader(ticker, 'yahoo', start, end)
+        data_incr3['Asset'] = ticker
+        data_incr3['Asset_Type'] = a_type
+        data_incr3.reset_index(inplace = True, drop = False)
+        price_agg3 = pd.concat([price_agg3, data_incr3]) 
+
+price_agg3.reset_index(inplace = True, drop = True)
+
+price_agg3['Day_of_Week'] = price_agg3['Date'].dt.day_name()
+
+week_filter3 = (
+    (price_agg3['Asset_Type'] == 'Stock') & (price_agg3['Day_of_Week'] == 'Friday')
+    |
+    (price_agg3['Asset_Type'] == 'Crypto') & (price_agg3['Day_of_Week'] == 'Sunday')
+)
+
+price_agg_weekly3 = price_agg3.loc[week_filter3]
+
+price_agg_weekly3.reset_index(inplace = True, drop = True)
+
+price_hist = pd.concat([price_agg_weekly, price_agg_weekly2, price_agg_weekly3])
+price_hist.reset_index(inplace = True, drop = True)
+
+Weekly_ROI = []
+
+for index, asset in zip(price_hist.index, price_hist['Asset']):
+    if index == 0:
+        Weekly_ROI.append(np.NaN)
+    #elif it's a new asset, return NaN
+    elif price_hist['Asset'].iloc[index] != price_hist['Asset'].iloc[index - 1]:
+        Weekly_ROI.append(np.NaN)
+    else:
+        Weekly_ROI.append(price_hist['Adj Close'].iloc[index] / price_hist['Adj Close'].iloc[index - 1])
+        
+ price_hist['Weekly_ROI'] = Weekly_ROI
+ 
+ # Asset statistics
+groupbystock = price_hist.groupby(['Asset'])
+weekly_roi = groupbystock['Weekly_ROI'].describe()
+
+weekly_roi['Coeff_Var'] = weekly_roi['std'] / weekly_roi['mean']
+weekly_roi['Market_Cap'] = web.get_quote_yahoo(weekly_roi.index)['marketCap']
+
+weekly_roi['ROI_Rank'] = weekly_roi['mean'].rank(ascending = False)
+weekly_roi['Coeff_Var_Rank'] = weekly_roi['Coeff_Var'].rank()
+weekly_roi['MarketCap_Rank'] = weekly_roi['Market_Cap'].rank(ascending = False)
+
+# Weight variables
+ROI_Wt = 0.5
+Coeff_Var_Wt = 0.2
+MarketCap_Wt = 0.3
+
+weekly_roi['Blended_Rank'] = weekly_roi['ROI_Rank'] * ROI_Wt + weekly_roi['Coeff_Var_Rank'] * Coeff_Var_Wt + weekly_roi['MarketCap_Rank'] * MarketCap_Wt
+
+weekly_roi.sort_values(by = ['Blended_Rank'], inplace = True)
+
+weekly_roi.to_excel('rankings.xlsx', columns = ['count', 'mean', 'std', 'Coeff_Var', 'Market_Cap', 'ROI_Rank', 'Coeff_Var_Rank', 'MarketCap_Rank', 'Blended_Rank'])
