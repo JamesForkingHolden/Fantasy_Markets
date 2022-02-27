@@ -1,0 +1,67 @@
+import pandas_datareader.data as web
+import numpy as np
+import datetime as dt
+import pandas as pd
+
+currency = 'USD'
+metric = 'Adj Close'
+start = dt.datetime(2022, 2, 3)
+end = dt.datetime(2022, 2, 27)
+
+asset_list = pd.read_excel('SB_Actuarial_Fantasymarkets.xlsx', sheet_name='Upload_Download',
+                           header=2, usecols='AF:AG', nrows=123)  # sheet_name = '' if necc
+
+assets = asset_list.iloc[:, 0].tolist()
+asset_types = asset_list.iloc[:, 1].tolist()
+
+colnames = []
+
+# only for re-runs, deletes original tables
+# del data_incr del price_agg colnames = []
+
+for ticker, a_type in zip(assets, asset_types):
+    if ticker == assets[0]:
+        price_agg = web.DataReader(ticker, 'yahoo', start, end)
+        price_agg['Asset'] = ticker
+        price_agg['Asset_Type'] = a_type
+        price_agg.reset_index(inplace=True, drop=False)
+
+    else:
+        data_incr = web.DataReader(ticker, 'yahoo', start, end)
+        data_incr['Asset'] = ticker
+        data_incr['Asset_Type'] = a_type
+        data_incr.reset_index(inplace=True, drop=False)
+        price_agg = pd.concat([price_agg, data_incr])
+
+price_agg.reset_index(inplace=True, drop=True)
+
+price_agg['Day_of_Week'] = price_agg['Date'].dt.day_name()
+
+week_filter = (
+    (price_agg['Asset_Type'] == 'Stock') & (
+        price_agg['Day_of_Week'] == 'Friday')
+    |
+    (price_agg['Asset_Type'] == 'Crypto') & (
+        price_agg['Day_of_Week'] == 'Sunday')
+)
+
+price_agg_weekly = price_agg.loc[week_filter]
+
+price_agg_weekly.reset_index(inplace=True, drop=True)
+
+Weekly_ROI = []
+
+for index, asset in zip(price_agg_weekly.index, price_agg_weekly['Asset']):
+    if index == 0:
+        Weekly_ROI.append(np.NaN)
+    # elif it's a new asset, return NaN
+    elif price_agg_weekly['Asset'].iloc[index] != price_agg_weekly['Asset'].iloc[index - 1]:
+        Weekly_ROI.append(np.NaN)
+    else:
+        Weekly_ROI.append(
+            price_agg_weekly['Adj Close'].iloc[index] / price_agg_weekly['Adj Close'].iloc[index - 1])
+
+price_agg_weekly['Weekly_ROI'] = Weekly_ROI
+
+price_agg_weekly.to_excel('test.xlsx', columns=[
+                          'Date', 'Adj Close', 'Asset', 'Asset_Type', 'Day_of_Week', 'Weekly_ROI'])
